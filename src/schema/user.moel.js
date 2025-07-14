@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
-    requireed: true,
+    required: true,
     unique: true,
   },
   password: {
@@ -11,8 +11,9 @@ const userSchema = new mongoose.Schema({
     required: true,
   },
   role: {
-    type: String,
-    default: "customer",
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Role",
+    required: true,
   },
   profile: {
     type: String,

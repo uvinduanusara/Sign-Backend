@@ -3,8 +3,9 @@ import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-import userRouter from "./routes/userRoute.js";
-import moduleRouter from "./routes/moduleRoute.js";
+import userRouter from "./routes/user.route.js";
+import moduleRouter from "./routes/module.route.js";
+import roleRouter from "./routes/role.route.js";
 dotenv.config();
 
 const app = express();
@@ -27,6 +28,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use("/api/role", roleRouter)
 app.use("/api/user", userRouter);
 app.use("api/module", moduleRouter);
 

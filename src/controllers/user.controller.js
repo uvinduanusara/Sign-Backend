@@ -1,4 +1,4 @@
-import User from "../schema/user.moel.js";
+import User from "../schema/user.model.js";
 import Role from "../schema/role.model.js";
 import bcrypt, { hashSync } from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -54,25 +54,4 @@ export function LoginUser(req, res) {
       }
     }
   });
-}
-
-export function isAdmin(req) {
-  if (req.user == null) {
-    return false;
-  }
-
-  if (req.user.role != "admin") {
-    return false;
-  }
-  return true;
-}
-
-export function isCustomer(req) {
-  if (req.user == null) {
-    return false;
-  }
-  if (req.user.role != "customer") {
-    return false;
-  }
-  return tru;
 }

@@ -1,4 +1,5 @@
-import jwt, { decode } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+import Role from "../schema/role.model.js";
 
 const secretkey = "secretkey";
 
@@ -21,16 +22,28 @@ export function auth(req, res, next) {
   });
 }
 
-export function requireAuth(req, res, next){
-    if(!req.user){
-        return res.status(401).json({ message: "Authentication required"});
-    }
-    next();
+export function requireAuth(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  next();
 }
 
-export function requireAdmin(req, res, next){
-    if(!req.user || req.user.role != "admin"){
-        return res.status(401).json({ message: "Admin Access Only"});
+export async function requireAdmin(req, res, next) {
+  try {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({ message: "Admin Access only" });
     }
+
+    const role = await Role.findById(req.user.role);
+
+    if (!role || role.roleName !== "admin") {
+      return res.status(403).json({ message: "Admin Access only" });
+    }
+
     next();
+  } catch (error) {
+    console.error("requireAdmin error:", error);
+    res.status(500).json({ message: "Server error in admin check" });
+  }
 }

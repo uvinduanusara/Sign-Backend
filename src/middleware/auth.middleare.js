@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import Role from "../schema/role.model.js";
 
-const secretkey = "secretkey";
+const secretkey = process.env.SCRECT_KEY;
 
 export function auth(req, res, next) {
   const authHeader = req.header("Authorization");

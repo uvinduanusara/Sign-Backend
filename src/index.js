@@ -4,7 +4,6 @@ import mongoose from "mongoose";
 import userRouter from "./routes/user.route.js";
 import moduleRouter from "./routes/module.route.js";
 import roleRouter from "./routes/role.route.js";
-import { auth } from "./middleware/auth.middleare.js";
 
 const app = express();
 const mongoUrl = process.env.MONGO_URL;

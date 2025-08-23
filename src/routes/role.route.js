@@ -1,6 +1,6 @@
 import express from "express";
 import { createRole } from "../controllers/role.controller.js";
-import { auth, requireAdmin, requireAuth } from "../middleware/auth.middleare.js";
+import { auth, requireAdmin, requireAuth } from "../middleware/auth.middleware.js";
 
 const roleRouter = express.Router();
 

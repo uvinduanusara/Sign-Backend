@@ -9,9 +9,39 @@ import {
 
 const secretkey = process.env.SCRECT_KEY;
 
+export async function getAllUsers(req, res) {
+  try {
+    // fetch all users and populate role name
+    const users = await User.find().populate("role", "roleName");
+
+    res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Get all users error:", error);
+    res.status(500).json({ message: "Server error fetching users" });
+  }
+}
+
 export async function createUser(req, res) {
   try {
-    const { email, password, roleName = "customer", profile } = req.body;
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      roleName = "user",
+      profile,
+    } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({
+        message: "Email already registered",
+      });
+    }
 
     const role = await Role.findOne({ roleName: roleName.toLowerCase() });
     if (!role) {
@@ -32,6 +62,8 @@ export async function createUser(req, res) {
     const hasedPassword = bcrypt.hashSync(password, 10);
 
     const user = new User({
+      firstName,
+      lastName,
       email,
       password: hasedPassword,
       role: role._id,
@@ -65,6 +97,8 @@ export async function LoginUser(req, res) {
       email: user.email,
       role: user.role._id,
       roleName: user.role.roleName,
+      isProMember: user.isProMember,
+      proMembershipExpiry: user.proMembershipExpiry,
     };
 
     const token = jwt.sign(tokenPayload, secretkey, { expiresIn: "1h" });
@@ -72,6 +106,12 @@ export async function LoginUser(req, res) {
     res.status(200).json({
       message: "Login Successfull",
       token,
+      id: user._id,
+      email: user.email,
+      role: user.role._id,
+      roleName: user.role.roleName,
+      isProMember: user.isProMember,
+      proMembershipExpiry: user.proMembershipExpiry,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -106,5 +146,74 @@ export async function createSubscription(req, res) {
     res
       .status(500)
       .json({ message: "Server error during subscription creation" });
+  }
+}
+
+export async function purchaseProMembership(req, res) {
+  try {
+    const { duration = 30 } = req.body; // Default 30 days
+    const userId = req.user.id;
+
+    // For now, we'll simulate a successful payment
+    // In production, this would integrate with Stripe payment processing
+    
+    const expiryDate = new Date();
+    expiryDate.setDate(expiryDate.getDate() + duration);
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { 
+        isProMember: true,
+        proMembershipExpiry: expiryDate
+      },
+      { new: true, runValidators: true }
+    ).populate('role', 'roleName');
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Pro membership purchased successfully",
+      user: {
+        id: user._id,
+        email: user.email,
+        isProMember: user.isProMember,
+        proMembershipExpiry: user.proMembershipExpiry,
+        roleName: user.role.roleName
+      }
+    });
+  } catch (error) {
+    console.error("Purchase pro membership error:", error);
+    res.status(500).json({ message: "Server error purchasing pro membership" });
+  }
+}
+
+export async function getUserProfile(req, res) {
+  try {
+    const userId = req.user.id;
+    
+    const user = await User.findById(userId)
+      .populate('role', 'roleName')
+      .select('-password'); // Exclude password
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      isProMember: user.isProMember,
+      proMembershipExpiry: user.proMembershipExpiry,
+      roleName: user.role.roleName,
+      status: user.status,
+      createdAt: user.createdAt
+    });
+  } catch (error) {
+    console.error("Get user profile error:", error);
+    res.status(500).json({ message: "Server error getting user profile" });
   }
 }

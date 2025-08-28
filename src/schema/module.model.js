@@ -14,9 +14,6 @@ const moduleSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  videoUrl: {
-    type: String,
-  },
   image: [
     {
       type: String,

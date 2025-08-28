@@ -2,12 +2,19 @@ import express from "express";
 import bodyParser from "body-parser";
 import mongoose from "mongoose";
 import cors from "cors";
+import dotenv from "dotenv";
+
+// Load environment variables first
+dotenv.config();
+
+// Now import routes after env vars are loaded
 import userRouter from "./routes/user.route.js";
 import moduleRouter from "./routes/module.route.js";
 import roleRouter from "./routes/role.route.js";
 import learningRouter from "./routes/learning.route.js";
 import adminRouter from "./routes/admin.route.js";
 import practiceRouter from "./routes/practice.route.js";
+import reviewRouter from "./routes/review.route.js";
 
 const app = express();
 const mongoUrl = process.env.MONGO_URL;
@@ -16,7 +23,7 @@ const corsOptions = {
   origin: ["http://localhost:3000", "http://localhost:3001"], // Allow your frontend URLs
   credentials: true, // Allow cookies and authentication headers
   optionsSuccessStatus: 200,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
 
@@ -46,6 +53,7 @@ app.use("/api/module", moduleRouter);
 app.use("/api/learn", learningRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/practice", practiceRouter);
+app.use("/api/reviews", reviewRouter);
 
 const connection = mongoose.connection;
 

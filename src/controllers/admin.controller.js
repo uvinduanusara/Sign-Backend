@@ -2,6 +2,7 @@ import User from "../schema/user.model.js";
 import Learning from "../schema/learning.model.js";
 import Practice from "../schema/practice.model.js";
 import Role from "../schema/role.model.js";
+import Review from "../schema/review.model.js";
 import { deleteImageFile } from "../middleware/upload.middleware.js";
 import path from "path";
 
@@ -9,20 +10,78 @@ import path from "path";
 export async function getDashboardStats(req, res) {
   try {
     const totalUsers = await User.countDocuments();
-    const totalLessons = await Learning.countDocuments();
-    const activeUsers = await User.countDocuments({ status: 'active' });
-    const totalRoles = await Role.countDocuments();
+    const totalLearningMaterials = await Learning.countDocuments();
+    const totalPracticeMaterials = await Practice.countDocuments();
+    const totalReviews = await Review.countDocuments();
+    const approvedReviews = await Review.countDocuments({ status: 'approved' });
+    
+    // Calculate previous month data for trends
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    const usersLastMonth = await User.countDocuments({ 
+      createdAt: { $lt: oneMonthAgo } 
+    });
+    const reviewsLastMonth = await Review.countDocuments({ 
+      createdAt: { $lt: oneMonthAgo } 
+    });
+    
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    const materialsThisWeek = await Learning.countDocuments({ 
+      createdAt: { $gte: oneWeekAgo } 
+    });
 
-    // Mock data for demo purposes
+    // Calculate growth percentages
+    const userGrowth = usersLastMonth > 0 
+      ? Math.round(((totalUsers - usersLastMonth) / usersLastMonth) * 100) 
+      : 0;
+      
+    const reviewGrowth = reviewsLastMonth > 0 
+      ? Math.round(((totalReviews - reviewsLastMonth) / reviewsLastMonth) * 100) 
+      : 0;
+
+    // Mock detection accuracy (would come from ML service in production)
+    const detectionAccuracy = 96.7 + (Math.random() * 2 - 1); // 95.7-97.7 range
+
+    // Learning materials by month for the last 6 months
+    const materialsChartData = [];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonth = new Date().getMonth();
+    
+    for (let i = 5; i >= 0; i--) {
+      const monthIndex = (currentMonth - i + 12) % 12;
+      const monthStart = new Date();
+      monthStart.setMonth(monthIndex, 1);
+      monthStart.setHours(0, 0, 0, 0);
+      
+      const monthEnd = new Date();
+      monthEnd.setMonth(monthIndex + 1, 0);
+      monthEnd.setHours(23, 59, 59, 999);
+      
+      const materialsCount = await Learning.countDocuments({
+        createdAt: { $gte: monthStart, $lte: monthEnd }
+      });
+      
+      materialsChartData.push({
+        month: months[monthIndex],
+        materials: materialsCount,
+        practices: Math.floor(materialsCount * (0.6 + Math.random() * 0.4)) // Mock practice data
+      });
+    }
+
     const stats = {
       totalUsers,
-      totalLessons,
-      activeUsers,
-      totalRoles,
-      totalSubscriptions: Math.floor(totalUsers * 0.3), // Mock 30% subscription rate
-      monthlyRevenue: Math.floor(Math.random() * 10000) + 5000,
-      completedLessons: Math.floor(totalLessons * 0.6),
-      averageProgress: Math.floor(Math.random() * 30) + 60
+      totalLearningMaterials,
+      totalPracticeMaterials,
+      totalReviews: approvedReviews,
+      detectionAccuracy: Math.round(detectionAccuracy * 10) / 10,
+      userGrowth: Math.max(userGrowth, 0),
+      reviewGrowth: Math.max(reviewGrowth, 0),
+      materialsThisWeek,
+      accuracyImprovement: 2.3,
+      materialsChartData
     };
 
     res.json({
@@ -386,42 +445,39 @@ export async function deleteMaterial(req, res) {
   }
 }
 
-// Reviews Management (Mock implementation)
+// Reviews Management
 export async function getAllReviews(req, res) {
   try {
-    // Mock reviews data since there's no reviews model
-    const mockReviews = [
-      {
-        id: '1',
-        userId: 'user1',
-        userName: 'John Doe',
-        rating: 5,
-        comment: 'Great learning experience!',
-        lessonId: 'lesson-001',
-        lessonName: 'Basic Greetings',
-        status: 'approved',
-        createdAt: new Date('2024-01-15')
-      },
-      {
-        id: '2',
-        userId: 'user2',
-        userName: 'Jane Smith',
-        rating: 4,
-        comment: 'Very helpful for beginners.',
-        lessonId: 'lesson-002',
-        lessonName: 'Alphabet A-M',
-        status: 'pending',
-        createdAt: new Date('2024-01-14')
-      }
-    ];
+    const { page = 1, limit = 10, status = '', since = '' } = req.query;
+    
+    let query = {};
+    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+      query.status = status;
+    }
+
+    // Add timestamp filter for notifications
+    if (since) {
+      query.createdAt = { $gte: new Date(since) };
+    }
+
+    const reviews = await Review.find(query)
+      .populate('userId', 'firstName lastName email profile')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Review.countDocuments(query);
 
     res.json({
       success: true,
       data: {
-        reviews: mockReviews,
-        totalPages: 1,
-        currentPage: 1,
-        totalReviews: mockReviews.length
+        reviews,
+        pagination: {
+          total,
+          pages: Math.ceil(total / limit),
+          page: parseInt(page),
+          limit: parseInt(limit)
+        }
       }
     });
   } catch (error) {
@@ -438,10 +494,30 @@ export async function updateReviewStatus(req, res) {
     const { reviewId } = req.params;
     const { status } = req.body;
 
-    // Mock implementation
+    if (!['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status. Must be 'pending', 'approved', or 'rejected'"
+      });
+    }
+
+    const review = await Review.findByIdAndUpdate(
+      reviewId,
+      { status },
+      { new: true }
+    ).populate('userId', 'firstName lastName email');
+
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Review not found"
+      });
+    }
+
     res.json({
       success: true,
-      message: `Review ${reviewId} status updated to ${status}`
+      data: review,
+      message: `Review status updated to ${status}`
     });
   } catch (error) {
     console.error("Update review status error:", error);
@@ -456,10 +532,18 @@ export async function deleteReview(req, res) {
   try {
     const { reviewId } = req.params;
 
-    // Mock implementation
+    const review = await Review.findByIdAndDelete(reviewId);
+    
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: "Review not found"
+      });
+    }
+
     res.json({
       success: true,
-      message: `Review ${reviewId} deleted successfully`
+      message: "Review deleted successfully"
     });
   } catch (error) {
     console.error("Delete review error:", error);

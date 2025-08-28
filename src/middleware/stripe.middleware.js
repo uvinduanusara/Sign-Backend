@@ -1,10 +1,17 @@
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Initialize stripe lazily to ensure env vars are loaded
+let stripe;
+function getStripe() {
+  if (!stripe) {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripe;
+}
 
 export async function createCustomer(email, name, metadata = {}) {
   try {
-    const customer = await stripe.customers.create({
+    const customer = await getStripe().customers.create({
       email,
       name,
       metadata
@@ -33,7 +40,7 @@ export async function createSubscriptionLink(customerId) {
       throw new Error('Stripe Product ID not found in environment variables');
     }
 
-    const prices = await stripe.prices.list({
+    const prices = await getStripe().prices.list({
       product: productId,
       active: true
     });
@@ -42,7 +49,7 @@ export async function createSubscriptionLink(customerId) {
       throw new Error('No active prices found for product');
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       mode: 'subscription',
@@ -50,8 +57,8 @@ export async function createSubscriptionLink(customerId) {
         price: prices.data[0].id,
         quantity: 1
       }],
-      success_url: `${process.env.CLIENT_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL}/subscription/cancel`,
+      success_url: `${process.env.CLIENT_URL}/membership/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/purchase-membership?cancelled=true`,
       allow_promotion_codes: true
     });
     
@@ -72,7 +79,7 @@ export async function createSubscriptionLink(customerId) {
 
 export async function cancelSubscription(subscriptionId) {
   try {
-    const subscription = await stripe.subscriptions.update(subscriptionId, {
+    const subscription = await getStripe().subscriptions.update(subscriptionId, {
       cancel_at_period_end: true
     });
     
@@ -92,7 +99,7 @@ export async function cancelSubscription(subscriptionId) {
 
 export async function updateCustomerEmail(customerId, newEmail) {
   try {
-    const customer = await stripe.customers.update(customerId, {
+    const customer = await getStripe().customers.update(customerId, {
       email: newEmail
     });
     
@@ -112,7 +119,7 @@ export async function updateCustomerEmail(customerId, newEmail) {
 
 export async function getCustomerSubscriptions(customerId) {
   try {
-    const subscriptions = await stripe.subscriptions.list({
+    const subscriptions = await getStripe().subscriptions.list({
       customer: customerId,
       status: 'all'
     });
@@ -131,6 +138,160 @@ export async function getCustomerSubscriptions(customerId) {
   }
 }
 
+export async function createMembershipCheckoutSession(customerId, membershipType) {
+  try {
+    let priceData;
+    
+    // Define pricing based on membership type
+    if (membershipType === 'monthly') {
+      priceData = {
+        currency: 'usd',
+        product_data: {
+          name: 'SignLearn AI Pro - Monthly',
+          description: 'Access to premium learning materials and features',
+        },
+        unit_amount: 999, // $9.99 in cents
+        recurring: {
+          interval: 'month',
+        },
+      };
+    } else if (membershipType === 'yearly') {
+      priceData = {
+        currency: 'usd',
+        product_data: {
+          name: 'SignLearn AI Pro - Yearly',
+          description: 'Access to premium learning materials and features (Save $20!)',
+        },
+        unit_amount: 9999, // $99.99 in cents
+        recurring: {
+          interval: 'year',
+        },
+      };
+    } else {
+      throw new Error('Invalid membership type. Must be "monthly" or "yearly"');
+    }
+
+    const session = await getStripe().checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [{
+        price_data: priceData,
+        quantity: 1
+      }],
+      success_url: `${process.env.CLIENT_URL}/membership/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/purchase-membership?cancelled=true`,
+      allow_promotion_codes: true,
+      metadata: {
+        membership_type: membershipType,
+        user_id: customerId
+      }
+    });
+    
+    return {
+      success: true,
+      sessionId: session.id,
+      url: session.url,
+      message: 'Membership checkout session created successfully'
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to create membership checkout session'
+    };
+  }
+}
+
+export async function createOneTimePaymentSession(customerId, membershipType) {
+  try {
+    let priceData;
+    let durationDays;
+    
+    // Define pricing for one-time payments
+    if (membershipType === 'monthly') {
+      priceData = {
+        currency: 'usd',
+        product_data: {
+          name: 'SignLearn AI Pro - 30 Days',
+          description: 'One-time payment for 30 days of premium access',
+        },
+        unit_amount: 999, // $9.99 in cents
+      };
+      durationDays = 30;
+    } else if (membershipType === 'yearly') {
+      priceData = {
+        currency: 'usd',
+        product_data: {
+          name: 'SignLearn AI Pro - 365 Days',
+          description: 'One-time payment for 365 days of premium access (Save $20!)',
+        },
+        unit_amount: 9999, // $99.99 in cents
+      };
+      durationDays = 365;
+    } else {
+      throw new Error('Invalid membership type. Must be "monthly" or "yearly"');
+    }
+
+    const session = await getStripe().checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'payment',
+      line_items: [{
+        price_data: priceData,
+        quantity: 1
+      }],
+      success_url: `${process.env.CLIENT_URL}/membership/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/purchase-membership?cancelled=true`,
+      metadata: {
+        membership_type: membershipType,
+        duration_days: durationDays.toString(),
+        user_id: customerId
+      }
+    });
+    
+    return {
+      success: true,
+      sessionId: session.id,
+      url: session.url,
+      message: 'One-time payment session created successfully'
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to create one-time payment session'
+    };
+  }
+}
+
+export async function checkCustomerExists(customerId) {
+  try {
+    const customer = await getStripe().customers.retrieve(customerId);
+    
+    return {
+      success: true,
+      customer,
+      exists: !customer.deleted,
+      message: 'Customer retrieved successfully'
+    };
+  } catch (error) {
+    if (error.type === 'StripeInvalidRequestError' && error.code === 'resource_missing') {
+      return {
+        success: true,
+        exists: false,
+        message: 'Customer does not exist'
+      };
+    }
+    
+    return {
+      success: false,
+      error: error.message,
+      message: 'Failed to check customer existence'
+    };
+  }
+}
+
 export async function verifyWebhookSignature(payload, signature) {
   try {
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -139,7 +300,7 @@ export async function verifyWebhookSignature(payload, signature) {
       throw new Error('Webhook secret not configured');
     }
 
-    const event = stripe.webhooks.constructEvent(
+    const event = getStripe().webhooks.constructEvent(
       payload,
       signature,
       endpointSecret

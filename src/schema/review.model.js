@@ -11,13 +11,31 @@ const reviewSchema = new mongoose.Schema({
     required: true,
   },
   rating: {
-    type: String,
-    default: "0",
+    type: Number,
+    min: 1,
+    max: 5,
+    required: true,
   },
   userEmail: {
     type: String,
     required: true,
   },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  userName: {
+    type: String,
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  }
+}, {
+  timestamps: true
 });
 
 const Review = mongoose.model("Review", reviewSchema);

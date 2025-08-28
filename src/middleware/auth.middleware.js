@@ -1,7 +1,10 @@
 import jwt from "jsonwebtoken";
 import Role from "../schema/role.model.js";
 
-const secretkey = process.env.SCRECT_KEY;
+// Get secret key lazily to ensure env vars are loaded
+function getSecretKey() {
+  return process.env.SCRECT_KEY;
+}
 
 // ✅ Verify JWT and attach user
 export function auth(req, res, next) {
@@ -13,7 +16,7 @@ export function auth(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
-  jwt.verify(token, secretkey, (err, decoded) => {
+  jwt.verify(token, getSecretKey(), (err, decoded) => {
     if (err) {
       return res.status(401).json({ message: "Invalid or Expired Token" });
     }
